@@ -1,8 +1,10 @@
 # win-capture-audio
 
 OBS Studio plugin that captures audio from a specific application rather than
-the whole system. Fork of `bozbez/win-capture-audio`. C++23, CMake, Windows
-only, MSVC.
+the whole system. Based on `Ayrton09/win-capture-audio` (git remote `ayrton`), a
+modernized fork of the unmaintained `bozbez/win-capture-audio`. Ayrton's history
+shares no commits with bozbez's, so sync from `ayrton`, not from upstream.
+C++23, CMake, Windows only, MSVC.
 
 ## How it works
 
@@ -29,38 +31,41 @@ failure modes this design is prone to.
 
 ## Building
 
-**Prerequisites (none of these are currently satisfied in this checkout):**
+**Prerequisites (not yet satisfied on this machine):**
 
-- `git submodule update --init` — `deps/wil` (Microsoft WIL) is empty right now,
-  and `target_include_directories` points into it, so the build cannot compile
-  until this is run.
-- CMake 3.20+ — not on PATH on this machine.
-- libobs development files discoverable by `find_package(libobs REQUIRED)`.
-  Typically an OBS source tree built from scratch, or an installed OBS SDK;
-  point CMake at it with `-DCMAKE_PREFIX_PATH=<path-to-libobs>`.
+- `git submodule update --init` — `deps/wil` (Microsoft WIL) is empty in a fresh
+  checkout and the build includes from it.
+- CMake 3.24+ — not on PATH on this machine.
+- Visual Studio 2022+ with the MSVC C++ workload, and an installed OBS Studio.
 - Inno Setup (`iscc`) only if building the installer.
 
-The configure/build invocation has **not** been verified in this environment —
-treat it as the standard OBS-plugin shape and confirm before relying on it:
+No libobs SDK is needed: if `find_package(libobs)` finds nothing, configure runs
+`cmake/bootstrap-obs-sdk.ps1`, which builds headers + import library into
+`deps/libobs-sdk` from the installed OBS (it downloads the matching obs-studio
+headers). Pin the headers with `-DOBS_VERSION=<tag>`.
 
 ```bash
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH=<libobs>
+cmake -S . -B build -A x64
+cmake --build build --config RelWithDebInfo
+cmake --install build --config RelWithDebInfo   # -> %ProgramData%\obs-studio\plugins\win-capture-audio
 ```
 
-Build `RelWithDebInfo` (not `Release`) when producing anything a user will
-install: the `POST_BUILD` step only stages `release/` for those two
-configurations, and only `RelWithDebInfo` copies the `.pdb`.
+Not yet verified in this environment.
 
-There is no test suite and no CI. Verification is manual: load the built
-plugin into OBS and check the "Application Audio Output Capture" source.
+The install layout is `%ProgramData%\obs-studio\plugins\<name>\{bin\64bit,data}`.
+The legacy layout inside `C:\Program Files\obs-studio\` still loads and would
+shadow it; the installer removes it, a bare `cmake --install` does not.
+
+No test suite. CI (`.github/workflows/build.yml`) only builds and packages.
+Verification is manual: load the plugin into OBS and check the "Application
+Audio Output Capture" source.
 
 ## Generated files — never edit
 
-`src/plugin-macros.generated.hpp` and `installer/installer.generated.iss` are
-`configure_file` outputs, regenerated on every configure and gitignored via
-`*.generated.*`. Edit the templates instead: `src/plugin-macros.hpp.in` and
-`installer/installer.iss.in`. A PreToolUse hook blocks writes to the generated
-pair.
+`plugin-macros.generated.hpp`, `version.rc` and `installer.generated.iss` are
+`configure_file` outputs written under `build/`, regenerated on every configure.
+Edit the templates instead: `src/plugin-macros.hpp.in`, `src/version.rc.in` and
+`installer/installer.iss.in`.
 
 CMake also stamps the short commit hash into `GIT_HASH` at configure time, so
 configure *after* committing if the build's reported hash matters.
@@ -76,7 +81,6 @@ configure *after* committing if the build's reported hash matters.
   alignment and the guard.
 - Every user-facing string goes through `obs_module_text`. Adding one means
   adding the key to `data/locale/en-GB.ini` (the fallback reference) — see
-  `.claude/skills/locale-sync/SKILL.md`. Five translated locales are already
-  behind; that backlog predates current work.
+  `.claude/skills/locale-sync/SKILL.md`.
 - The version lives in exactly one place: `project(... VERSION x.y.z)` in
   `CMakeLists.txt`. See `.claude/skills/release-prep/SKILL.md`.
